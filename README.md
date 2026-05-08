@@ -64,8 +64,8 @@ Environment variables:
 ### 3. Build and run the proxy
 
 ```bash
-docker build -t excalidraw-ollama-proxy .
-docker run -p 8080:8080 \
+podman build -t excalidraw-ollama-proxy .
+podman run -p 8080:8080 \
   -e OLLAMA_BASE=http://your-ollama-host:11434 \
   -e MODEL=qwen2.5-coder:32b \
   excalidraw-ollama-proxy
@@ -77,7 +77,8 @@ docker run -p 8080:8080 \
 
 ```dockerfile
 ENV VITE_APP_AI_BACKEND=https://your-proxy-host
-ENV VITE_APP_WS_SERVER_URL=wss://your-room-server   # remove if not self-hosting the room server
+# Remove the next line if you are not self-hosting the room server
+ENV VITE_APP_WS_SERVER_URL=wss://your-room-server
 ```
 
 Then build:
