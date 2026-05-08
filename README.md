@@ -128,7 +128,7 @@ Returns `{"status": "ok"}`.
 
 ## Logging
 
-The proxy logs at `DEBUG` level by default, which includes request bodies and per-chunk SSE output. To reduce verbosity in production, edit the `logging.basicConfig(level=logging.DEBUG)` line in `app.py`.
+The proxy logs at `DEBUG` level by default, which includes request bodies and the Ollama response status. To reduce verbosity in production, edit the `logging.basicConfig(level=logging.DEBUG)` line in `app.py`.
 
 ## Tested setup
 
@@ -183,7 +183,7 @@ podman build -f Containerfile.excalidraw -t localhost/excalidraw-ai:latest .
 # Install quadlet and start
 sudo cp excalidraw-ollama-proxy.container /etc/containers/systemd/
 sudo systemctl daemon-reload
-sudo systemctl start excalidraw-ai-proxy.service
+sudo systemctl start excalidraw-ollama-proxy.service
 ```
 
 ### Caddy config
@@ -197,7 +197,7 @@ http://excalidraw-ai.home.arpa {
 
 https://excalidraw-ai.home.arpa {
     tls internal
-    reverse_proxy systemd-excalidraw-ai-proxy:8080 {
+    reverse_proxy systemd-excalidraw-ollama-proxy:8080 {
         flush_interval -1
     }
 }
