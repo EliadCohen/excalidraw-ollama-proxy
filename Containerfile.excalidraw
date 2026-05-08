@@ -1,0 +1,16 @@
+FROM docker.io/library/node:22-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache git python3 make g++
+RUN git clone --depth=1 https://github.com/excalidraw/excalidraw.git .
+RUN yarn install
+
+# Point AI features at the local proxy (implements Excalidraw's custom AI endpoints
+# and forwards to Ollama). Use the self-hosted room server for collaboration.
+ENV VITE_APP_AI_BACKEND=https://excalidraw-ai.home.arpa
+ENV VITE_APP_WS_SERVER_URL=wss://excalidraw-room.home.arpa
+
+RUN yarn build:app:docker
+
+FROM docker.io/library/nginx:stable-alpine
+COPY --from=builder /app/excalidraw-app/build /usr/share/nginx/html
+EXPOSE 80

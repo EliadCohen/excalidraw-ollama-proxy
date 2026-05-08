@@ -27,6 +27,17 @@ The proxy:
 - Streams Ollama's response, translating each chunk to Excalidraw's `{"type":"content","delta":"..."}` format
 - Sends `{"type":"done"}` at the end
 
+## Files in this repo
+
+| File | Purpose |
+|---|---|
+| `app.py` | The proxy (FastAPI) |
+| `Containerfile` | Builds the proxy image |
+| `Containerfile.excalidraw` | Builds a custom Excalidraw image with `VITE_APP_AI_BACKEND` baked in |
+| `excalidraw-ollama-proxy.container` | Podman quadlet for the proxy |
+| `pyproject.toml` | Python project config (uv) |
+| `tests/` | Test suite |
+
 ## Requirements
 
 - [Ollama](https://ollama.com) running and accessible from the proxy
@@ -41,7 +52,7 @@ The proxy:
 ollama pull qwen2.5-coder:32b
 ```
 
-If your model name doesn't match what Excalidraw sends (it hardcodes `gpt-4o` in some builds), create an alias:
+If your Excalidraw build hardcodes `gpt-4o` as the model name, create an alias so Ollama recognises it:
 
 ```bash
 ollama cp qwen2.5-coder:32b gpt-4o
@@ -49,14 +60,14 @@ ollama cp qwen2.5-coder:32b gpt-4o
 
 ### 2. Configure the proxy
 
-Environment variables (defaults shown):
+Environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OLLAMA_BASE` | `http://localhost:11434` | Ollama base URL |
+| `OLLAMA_BASE` | `http://systemd-ollama:11434` | Ollama base URL. Override for non-quadlet deployments (e.g. `http://localhost:11434`) |
 | `MODEL` | `qwen2.5-coder:32b` | Model to use for generation |
 
-### 3. Run with Docker / Podman
+### 3. Build and run the proxy
 
 ```bash
 docker build -t excalidraw-ollama-proxy .
@@ -66,17 +77,23 @@ docker run -p 8080:8080 \
   excalidraw-ollama-proxy
 ```
 
-### 4. Build Excalidraw with a custom AI backend URL
+### 4. Build Excalidraw with the proxy URL baked in
 
-The `VITE_APP_AI_BACKEND` variable is baked in at build time. Build Excalidraw pointing at your proxy:
+`VITE_APP_AI_BACKEND` is compiled into the JS bundle at build time — it cannot be set at runtime. Use `Containerfile.excalidraw` (included in this repo), editing the `ENV VITE_APP_AI_BACKEND` line to point at your proxy before building:
+
+```bash
+# Edit Containerfile.excalidraw first: set VITE_APP_AI_BACKEND
+docker build -f Containerfile.excalidraw -t excalidraw-custom .
+docker run -p 80:80 excalidraw-custom
+```
+
+Or build manually:
 
 ```bash
 git clone --depth=1 https://github.com/excalidraw/excalidraw.git
 cd excalidraw
-VITE_APP_AI_BACKEND=http://your-proxy-host:8080 yarn build
+VITE_APP_AI_BACKEND=http://your-proxy-host:8080 yarn build:app:docker
 ```
-
-Or use the included `Containerfile` for a full multi-stage build that does this automatically — edit the `ENV VITE_APP_AI_BACKEND` line before building.
 
 ## API endpoints
 
@@ -108,6 +125,10 @@ Accepts `{"texts": "..."}` and returns `{"code": "..."}` with generated code.
 
 Returns `{"status": "ok"}`.
 
+## Logging
+
+The proxy logs at `DEBUG` level by default, which includes request bodies and per-chunk SSE output. To reduce verbosity in production, set the log level via the `LOG_LEVEL` environment variable or edit `app.py`.
+
 ## Tested setup
 
 This proxy was developed and tested on a Fedora homelab server running Podman containers as systemd services via [quadlets](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html), with Caddy as the reverse proxy. All three components — Excalidraw, Ollama, and this proxy — run as containers on a shared Podman network (`infra_net`), with no GPU (CPU-only inference).
@@ -117,9 +138,9 @@ This proxy was developed and tested on a Fedora homelab server running Podman co
 ```
 LAN client
   └─▶ Caddy :443  (TLS termination, internal CA)
-        ├─▶ excalidraw.home.arpa   → systemd-excalidraw:80       (custom-built Excalidraw)
+        ├─▶ excalidraw.home.arpa    → systemd-excalidraw:80              (custom-built Excalidraw)
         ├─▶ excalidraw-ai.home.arpa → systemd-excalidraw-ai-proxy:8080  (this proxy)
-        └─▶ ollama.home.arpa       → systemd-ollama:11434        (Ollama)
+        └─▶ ollama.home.arpa        → systemd-ollama:11434               (Ollama)
 ```
 
 Containers resolve each other by name on `infra_net`. The proxy reaches Ollama at `http://systemd-ollama:11434` — never via the public hostname.
@@ -134,7 +155,7 @@ Network=infra_net
 Volume=/srv/ollama/models:/root/.ollama:Z
 ```
 
-**Excalidraw** (`excalidraw.container`) — built from the `Containerfile` in this repo with `VITE_APP_AI_BACKEND` baked in:
+**Excalidraw** (`excalidraw.container`) — image built from `Containerfile.excalidraw` in this repo:
 ```ini
 [Container]
 Image=localhost/excalidraw-ai:latest
@@ -152,11 +173,13 @@ Environment=MODEL=qwen2.5-coder:32b
 
 Build and start:
 ```bash
-# Build images
+# Build proxy image
 podman build -t localhost/excalidraw-ai-proxy:latest .
-podman build -t localhost/excalidraw-ai:latest /path/to/excalidraw-containerfile/
 
-# Install quadlets and start
+# Build Excalidraw image (edit VITE_APP_AI_BACKEND in Containerfile.excalidraw first)
+podman build -f Containerfile.excalidraw -t localhost/excalidraw-ai:latest .
+
+# Install quadlet and start
 sudo cp excalidraw-ollama-proxy.container /etc/containers/systemd/
 sudo systemctl daemon-reload
 sudo systemctl start excalidraw-ai-proxy.service
@@ -179,24 +202,9 @@ https://excalidraw-ai.home.arpa {
 }
 ```
 
-### Excalidraw Containerfile
-
-`VITE_APP_AI_BACKEND` must be set at build time (it's compiled into the JS bundle by Vite). The `Containerfile` in this repo builds Excalidraw from source and sets it to point at the proxy:
-
-```dockerfile
-ENV VITE_APP_AI_BACKEND=https://excalidraw-ai.home.arpa
-```
-
-Adjust the URL to wherever you expose the proxy.
-
 ### Model
 
 Tested with `qwen2.5-coder:32b` on a CPU-only host (56 cores, 251 GB RAM). Generation takes ~10 seconds with a warm model. Smaller models like `qwen2.5-coder:7b` are faster but produce lower-quality diagrams.
-
-If your Excalidraw build hardcodes `gpt-4o` as the model name, create an alias so Ollama recognises it:
-```bash
-ollama cp qwen2.5-coder:32b gpt-4o
-```
 
 ## License
 
