@@ -52,12 +52,6 @@ The proxy:
 ollama pull qwen2.5-coder:32b
 ```
 
-If your Excalidraw build hardcodes `gpt-4o` as the model name, create an alias so Ollama recognises it:
-
-```bash
-ollama cp qwen2.5-coder:32b gpt-4o
-```
-
 ### 2. Configure the proxy
 
 Environment variables:
@@ -79,20 +73,26 @@ docker run -p 8080:8080 \
 
 ### 4. Build Excalidraw with the proxy URL baked in
 
-`VITE_APP_AI_BACKEND` is compiled into the JS bundle at build time — it cannot be set at runtime. Use `Containerfile.excalidraw` (included in this repo), editing the `ENV VITE_APP_AI_BACKEND` line to point at your proxy before building:
+`VITE_APP_AI_BACKEND` is compiled into the JS bundle at build time — it cannot be set at runtime. Use `Containerfile.excalidraw` (included in this repo). Before building, edit the two `ENV` lines to match your setup:
 
-```bash
-# Edit Containerfile.excalidraw first: set VITE_APP_AI_BACKEND
-docker build -f Containerfile.excalidraw -t excalidraw-custom .
-docker run -p 80:80 excalidraw-custom
+```dockerfile
+ENV VITE_APP_AI_BACKEND=https://your-proxy-host
+ENV VITE_APP_WS_SERVER_URL=wss://your-room-server   # remove if not self-hosting the room server
 ```
 
-Or build manually:
+Then build:
+
+```bash
+podman build -f Containerfile.excalidraw -t excalidraw-custom .
+podman run -p 80:80 excalidraw-custom
+```
+
+Or build manually without the Containerfile:
 
 ```bash
 git clone --depth=1 https://github.com/excalidraw/excalidraw.git
 cd excalidraw
-VITE_APP_AI_BACKEND=http://your-proxy-host:8080 yarn build:app:docker
+VITE_APP_AI_BACKEND=https://your-proxy-host yarn build:app:docker
 ```
 
 ## API endpoints
@@ -127,7 +127,7 @@ Returns `{"status": "ok"}`.
 
 ## Logging
 
-The proxy logs at `DEBUG` level by default, which includes request bodies and per-chunk SSE output. To reduce verbosity in production, set the log level via the `LOG_LEVEL` environment variable or edit `app.py`.
+The proxy logs at `DEBUG` level by default, which includes request bodies and per-chunk SSE output. To reduce verbosity in production, edit the `logging.basicConfig(level=logging.DEBUG)` line in `app.py`.
 
 ## Tested setup
 
@@ -205,6 +205,8 @@ https://excalidraw-ai.home.arpa {
 ### Model
 
 Tested with `qwen2.5-coder:32b` on a CPU-only host (56 cores, 251 GB RAM). Generation takes ~10 seconds with a warm model. Smaller models like `qwen2.5-coder:7b` are faster but produce lower-quality diagrams.
+
+The proxy always sends the model name from the `MODEL` env var to Ollama — it ignores whatever model name Excalidraw puts in the request body. No model aliases are needed.
 
 ## License
 
