@@ -140,7 +140,7 @@ This proxy was developed and tested on a Fedora homelab server running Podman co
 LAN client
   └─▶ Caddy :443  (TLS termination, internal CA)
         ├─▶ excalidraw.home.arpa    → systemd-excalidraw:80              (custom-built Excalidraw)
-        ├─▶ excalidraw-ai.home.arpa → systemd-excalidraw-ai-proxy:8080  (this proxy)
+        ├─▶ excalidraw-ai.home.arpa → systemd-excalidraw-ollama-proxy:8080  (this proxy)
         └─▶ ollama.home.arpa        → systemd-ollama:11434               (Ollama)
 ```
 
