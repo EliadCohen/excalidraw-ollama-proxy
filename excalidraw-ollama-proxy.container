@@ -1,0 +1,16 @@
+[Unit]
+Description=Excalidraw AI proxy — translates Excalidraw AI endpoints to Ollama
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=localhost/excalidraw-ai-proxy:latest
+Network=infra_net
+Environment=OLLAMA_BASE=http://systemd-ollama:11434
+Environment=MODEL=qwen2.5-coder:32b
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
